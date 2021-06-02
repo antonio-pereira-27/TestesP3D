@@ -1,0 +1,12 @@
+﻿  Source.cpp
+D:\TestesP3D\Teste\Teste\Source.cpp(358,55): warning C4267: 'argumento': conversão de 'size_t' para 'GLsizei', possível perda de dados
+D:\TestesP3D\Teste\Teste\Source.cpp(513,14): warning C4244: '=': conversão de 'double' para 'GLfloat', possível perda de dados
+D:\TestesP3D\Teste\Teste\Source.cpp(514,14): warning C4244: '=': conversão de 'double' para 'GLfloat', possível perda de dados
+MSVCRT.lib(initializers.obj) : warning LNK4098: defaultlib 'libcmt.lib' conflita com uso de outras bibliotecas; use /NODEFAULTLIB:library
+  Gerando código
+  2 of 597 functions ( 0.3%) were compiled, the rest were copied from previous compilation.
+    0 functions were new in current compilation
+    8 functions had inline decision re-evaluated but remain unchanged
+  Finalizada a geração de código
+glew32s.lib(glew.obj) : warning LNK4099: PDB 'vc120.pdb' não foi encontrado 'glew32s.lib(glew.obj)' ou no 'D:\TestesP3D\Teste\x64\Release\vc120.pdb'; vinculando objeto quando quando sem nenhuma informação de depuração
+  Teste.vcxproj -> D:\TestesP3D\Teste\x64\Release\Teste.exe
