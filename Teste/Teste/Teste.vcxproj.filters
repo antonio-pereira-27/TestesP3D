@@ -42,8 +42,4 @@
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
-  <ItemGroup>
-    <None Include="triangles.vert" />
-    <None Include="triangles.frag" />
-  </ItemGroup>
 </Project>

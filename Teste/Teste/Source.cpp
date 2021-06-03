@@ -34,13 +34,14 @@ void display(void);
 void keyReceiver(GLFWwindow* window, int key, int scancode, int action, int mods);
 void scrollReceiver(GLFWwindow* window, double xoffset, double yoffset);
 void mouseReceiver(GLFWwindow* window, double xpos, double ypos);
+void deformObject(GLFWwindow* window);
 
 #define WIDTH 1920
 #define HEIGHT 1080
 
 
 GLuint VAO;
-GLuint Buffer;
+GLuint Buffers[3];
 const GLuint NumVertices = 6 * 2 * 3; // 6 faces * 2 triângulos/face * 3 vértices/triângulo
 
 GLuint programa;
@@ -54,6 +55,7 @@ GLfloat angy = 0.0f;
 
 // variável que guardo o estado da janela
 int windowState = 0; // 0 = normal, 1 = fullscreen, -1 = nao faz nada
+bool def_active, key5_releassed;
 
 
 OBJ IronMan;
@@ -63,6 +65,7 @@ int main(void) {
 	GLFWwindow* window = nullptr;
 	GLFWwindow* oldWindow = nullptr;
 	GLclampf backgroundColor[3] = { 1.0f, 1.0f, 1.0f };
+	def_active = true;
 
 
 	glfwSetErrorCallback(print_error);
@@ -110,12 +113,7 @@ int main(void) {
 		print_gl_info();
 
 		vector<string> textureFiles{
-			/*"textures/xpos.tga",
-			"textures/xneg.tga",
-			"textures/ypos.tga",
-			"textures/yneg.tga",
-			"textures/zpos.tga",
-			"textures/zneg.tga"*/
+		
 			"Iron_Man/Iron_Man_D.tga"
 		};
 		load_textures(textureFiles);
@@ -128,13 +126,11 @@ int main(void) {
 		glfwSetScrollCallback(window, scrollReceiver);
 		glfwSetCursorPosCallback(window, mouseReceiver);
 
-		// Indicação da Unidade de Textura a ligar ao sampler 'cubeMap'.
-		GLint location_textureArray = glGetProgramResourceLocation(programa, GL_UNIFORM, "cubeMap");
-		glProgramUniform1i(programa, location_textureArray, 0 /* Unidade de Textura #0 */);
 
 		while (!glfwWindowShouldClose(window)) {
 			glClear(GL_COLOR_BUFFER_BIT);
 
+			deformObject(window);
 			display();
 
 			glfwSwapBuffers(window);
@@ -198,11 +194,15 @@ void init(void) {
 	// Gera 'NumBuffers' nomes para VBOs.
 	// Neste caso gera 1 nome
 	// Esta função pode ser chamada antes da criação de VAOs.
-	glGenBuffers(1, &Buffer);
-	glBindBuffer(GL_ARRAY_BUFFER, Buffer);
-	// Inicializa o VBO (que está ativo) com dados imutáveis.
+	glGenBuffers(3, Buffers);
+	glBindBuffer(GL_ARRAY_BUFFER, Buffers[0]);
 	glBufferStorage(GL_ARRAY_BUFFER, IronMan.vertices.size() * sizeof(glm::vec3), &IronMan.vertices[0], 0);
-
+	glBindBuffer(GL_ARRAY_BUFFER, Buffers[1]);
+	glBufferStorage(GL_ARRAY_BUFFER, IronMan.uvs.size() * sizeof(glm::vec2), &IronMan.uvs[0], 0);
+	glBindBuffer(GL_ARRAY_BUFFER, Buffers[2]);
+	glBufferStorage(GL_ARRAY_BUFFER, IronMan.normais.size() * sizeof(glm::vec3), &IronMan.normais[0], 0);
+	
+	
 	// ****************************************************
 	// Shaders
 	// ****************************************************
@@ -225,19 +225,27 @@ void init(void) {
 	GLint coordsId = glGetProgramResourceLocation(programa, GL_PROGRAM_INPUT, "vPosition");
 	// Obtém a localização do atributo 'vNormal' no 'programa'.
 	GLint normalId = glGetProgramResourceLocation(programa, GL_PROGRAM_INPUT, "vNormal");
+	// Obtém a localização do atributo 'vTexture' no 'programa'.
+	GLint uvsId = glGetProgramResourceLocation(programa, GL_PROGRAM_INPUT, "vTexture");
 
 	// Ativa o VBO 'Buffer'.
-	glBindBuffer(GL_ARRAY_BUFFER, Buffer);
 	// Liga a localização do atributo 'vPosition' dos shaders do 'programa', ao VBO e VAO (ativos).
 	// Especifica também como é que a informação do atributo 'coordsId' deve ser interpretada.
 	// Neste caso, o atributo irá receber, por vértice, 3 elementos do tipo float. Stride de 6 floats e offset de 0 bytes.
+	glBindBuffer(GL_ARRAY_BUFFER, Buffers[0]);
 	glVertexAttribPointer(coordsId, 3 /*3 elementos por vértice*/, GL_FLOAT/*do tipo float*/, GL_FALSE, 0 /*stride*/, (void*)0);
+	glBindBuffer(GL_ARRAY_BUFFER, Buffers[1]);
+	glVertexAttribPointer(uvsId, 2 /*2 elementos por vértice*/, GL_FLOAT /*do tipo float*/, GL_FALSE, 0 /* stride*/, (void*)0);
+	glBindBuffer(GL_ARRAY_BUFFER, Buffers[2]);
 	glVertexAttribPointer(normalId, 3 /*3 elementos por vértice*/, GL_FLOAT/*do tipo float*/, GL_FALSE, 0 /*stride*/, (void*)0);
-
+	
 	// Habitita o atributo com localização 'coresId' para o VAO ativo.
 	glEnableVertexAttribArray(coordsId);
+	// Habitita o atributo com localização 'uvsId' para o VAO ativo.
+	glEnableVertexAttribArray(uvsId);
 	// Habitita o atributo com localização 'normalId' para o VAO ativo.
 	glEnableVertexAttribArray(normalId);
+	
 
 	// ****************************************************
 	// Matrizes de transformação
@@ -301,11 +309,33 @@ void init(void) {
 	glProgramUniform1f(programa, glGetProgramResourceLocation(programa, GL_UNIFORM, "pointLight[1].linear"), 0.06f);
 	glProgramUniform1f(programa, glGetProgramResourceLocation(programa, GL_UNIFORM, "pointLight[1].quadratic"), 0.02f);
 
+	// Fonte de luz conica
+	glProgramUniform3fv(programa, glGetProgramResourceLocation(programa, GL_UNIFORM, "spotLight.position"), 1, glm::value_ptr(glm::vec3(5.0, 5.0, 5.0)));
+	glProgramUniform3fv(programa, glGetProgramResourceLocation(programa, GL_UNIFORM, "spotLight.spotDirection"), 1, glm::value_ptr(glm::vec3(1.0, 1.0, 1.0)));
+	glProgramUniform3fv(programa, glGetProgramResourceLocation(programa, GL_UNIFORM, "spotLight.ambient"), 1, glm::value_ptr(glm::vec3(0.5, 0.5, 0.5)));
+	glProgramUniform3fv(programa, glGetProgramResourceLocation(programa, GL_UNIFORM, "spotLight.diffuse"), 1, glm::value_ptr(glm::vec3(1.0, 1.0, 1.0)));
+	glProgramUniform3fv(programa, glGetProgramResourceLocation(programa, GL_UNIFORM, "spotLight.specular"), 1, glm::value_ptr(glm::vec3(1.0, 1.0, 1.0)));
+	glProgramUniform1f(programa, glGetProgramResourceLocation(programa, GL_UNIFORM, "spotLight.constant"), 1.0f);
+	glProgramUniform1f(programa, glGetProgramResourceLocation(programa, GL_UNIFORM, "spotLight.linear"), 0.06f);
+	glProgramUniform1f(programa, glGetProgramResourceLocation(programa, GL_UNIFORM, "spotLight.quadratic"), 0.02f);
+	glProgramUniform1f(programa, glGetProgramResourceLocation(programa, GL_UNIFORM, "spotLight.spotCutoff"), glm::cos(glm::radians(11.0f)));
+	glProgramUniform1f(programa, glGetProgramResourceLocation(programa, GL_UNIFORM, "spotLight.spotExponent"), glm::cos(glm::radians(13.0f)));
+
 	glProgramUniform3fv(programa, glGetProgramResourceLocation(programa, GL_UNIFORM, "material.emissive"), 1, glm::value_ptr(glm::vec3(0.0, 0.0, 0.0)));
-	glProgramUniform3fv(programa, glGetProgramResourceLocation(programa, GL_UNIFORM, "material.ambient"), 1, glm::value_ptr(glm::vec3(1.0, 1.0, 1.0)));
-	glProgramUniform3fv(programa, glGetProgramResourceLocation(programa, GL_UNIFORM, "material.diffuse"), 1, glm::value_ptr(glm::vec3(1.0, 1.0, 1.0)));
-	glProgramUniform3fv(programa, glGetProgramResourceLocation(programa, GL_UNIFORM, "material.specular"), 1, glm::value_ptr(glm::vec3(1.0, 1.0, 1.0)));
-	glProgramUniform1f(programa, glGetProgramResourceLocation(programa, GL_UNIFORM, "material.shininess"), 12.0f);
+	glProgramUniform3fv(programa, glGetProgramResourceLocation(programa, GL_UNIFORM, "material.ambient"), 1, glm::value_ptr(glm::vec3(1.0f,1.0f,1.0f)));
+	glProgramUniform3fv(programa, glGetProgramResourceLocation(programa, GL_UNIFORM, "material.diffuse"), 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 1.0f)));
+	glProgramUniform3fv(programa, glGetProgramResourceLocation(programa, GL_UNIFORM, "material.specular"), 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 1.0f)));
+	glProgramUniform1f(programa, glGetProgramResourceLocation(programa, GL_UNIFORM, "material.shininess"), IronMan.material.ns);
+
+	// Light control first declaration
+	GLint ambLightId = glGetProgramResourceLocation(programa, GL_UNIFORM, "AmbLightOn");
+	glProgramUniform1i(programa, ambLightId, 1);
+	GLint dirLightId = glGetProgramResourceLocation(programa, GL_UNIFORM, "DirLightOn");
+	glProgramUniform1i(programa, dirLightId, 1);
+	GLint pointLightId = glGetProgramResourceLocation(programa, GL_UNIFORM, "PointLightOn");
+	glProgramUniform1i(programa, pointLightId, 1);
+	GLint spotLightId = glGetProgramResourceLocation(programa, GL_UNIFORM, "SpotLightOn");
+	glProgramUniform1i(programa, spotLightId, 1);
 
 	// ****************************************************
 	// Definir a janela de visualização (viewport)
@@ -361,112 +391,33 @@ void display(void) {
 void load_textures(vector<string> textureFiles) {
 	GLuint textureName = 0;
 
-	// Gera um nome de textura
 	glGenTextures(1, &textureName);
 
-	// Ativa a Unidade de Textura #0
-	// A Unidade de Textura 0 está ativa por defeito.
-	// Só uma Unidade de Textura pode estar ativa.
 	glActiveTexture(GL_TEXTURE0);
 
-	// Vincula esse nome de textura ao target GL_TEXTURE_CUBE_MAP da Unidade de Textura ativa.
-	glBindTexture(GL_TEXTURE_CUBE_MAP, textureName);
+	glBindTexture(GL_TEXTURE_2D, textureName);
 
-	// NOTA:
-	// Num cube map de texturas, todas as texturas devem:
-	// - ter a mesma resolução;
-	// - possuir o mesmo número de níveis de mipmap; e,
-	// - partilhar os mesmos parâmetros.
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-	// Define os parâmetros de filtragem (wrapping e ajuste de tamanho)
-	// para a textura que está vinculada ao target GL_TEXTURE_CUBE_MAP da Unidade de Textura ativa.
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-#ifdef _D_STORAGE
-	// Aloca memória para o cube map de texturas
-	// Textura imutável, i.e., apenas é possível alterar a imagem.
-	{
-		// Leitura da resolução e número de canais da imagem.
-		int width, height, nChannels;
-		// Ativa a inversão vertical da imagem, aquando da sua leitura para memória.
-		stbi_set_flip_vertically_on_load(true);
-		unsigned char* imageData = stbi_load(textureFiles[0].c_str(), &width, &height, &nChannels, 0);
-		if (imageData) {
-			stbi_image_free(imageData);
-
-			// Alocação de memória
-			glTexStorage2D(GL_TEXTURE_CUBE_MAP,
-				1,					// Número de níveis de Mipmap para as texturas. 1 se não forem utilizados Mipmaps.
-				nChannels == 4 ? GL_RGBA8 : GL_RGB8,	// Formato interno da imagem de textura
-				width, height		// width, height
-			);
-		}
-		else {
-			cout << "Error loading texture!" << endl;
-		}
-	}
-
-	// Para cada face do cubo
-	GLint face = 0;
-	for (auto file : textureFiles) {
-		// Leitura/descompressão do ficheiro com imagem de textura
-		int width, height, nChannels;
-		unsigned char* imageData = stbi_load(file.c_str(), &width, &height, &nChannels, 0);
-		if (imageData) {
-			// Carrega os dados da imagem para o Objeto de Textura vinculado ao target da face
-			glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face,
-				0,					// Nível do Mipmap
-				0, 0,				// xoffset, yoffset
-				width, height,		// width, height
-				nChannels == 4 ? GL_RGBA : GL_RGB,	// Formato da imagem
-				GL_UNSIGNED_BYTE,	// Tipos dos dados da imagem
-				imageData);			// Apontador para os dados da imagem de textura
-
-			face++;
-
-			// Liberta a imagem da memória do CPU
-			stbi_image_free(imageData);
-		}
-		else {
-			cout << "Error loading texture!" << endl;
-		}
-	}
-#else
-	// Ativa a inversão vertical da imagem, aquando da sua leitura para memória.
 	stbi_set_flip_vertically_on_load(true);
 
-	// Para cada face do cubo
-	GLint face = 0;
+	int width, height, nChannels;
+	unsigned char* imageData = stbi_load("Iron_Man/Iron_Man_D.tga", &width, &height, &nChannels, 0);
+	if (imageData)
+	{
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, nChannels == 4 ? GL_RGBA : GL_RGB, GL_UNSIGNED_BYTE, imageData);
 
-	for (auto file : textureFiles) {
-		// Leitura/descompressão do ficheiro com imagem de textura
-		int width, height, nChannels;
-		unsigned char* imageData = stbi_load(file.c_str(), &width, &height, &nChannels, 0);
-		if (imageData) {
-			// Carrega os dados da imagem para o Objeto de Textura vinculado ao target da face
-			glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face,
-				0,					// Nível do Mipmap
-				GL_RGB,				// Formato interno do OpenGL
-				width, height,		// width, height
-				0,					// border
-				nChannels == 4 ? GL_RGBA : GL_RGB,	// Formato da imagem
-				GL_UNSIGNED_BYTE,	// Tipos dos dados da imagem
-				imageData);			// Apontador para os dados da imagem de textura
-
-			face++;
-
-			// Liberta a imagem da memória do CPU
-			stbi_image_free(imageData);
-		}
-		else {
-			cout << "Error loading texture!" << endl;
-		}
+		glGenerateMipmap(GL_TEXTURE_2D);
+		
+		stbi_image_free(imageData);
 	}
-#endif
+	else
+	{
+		cout << "Error loading texture!" << endl;
+	}
 }
 
 // funçao para reconhecer as teclas do teclado e quando estas são pressionadas fazerem algo em especifico
@@ -512,4 +463,32 @@ void scrollReceiver(GLFWwindow* window, double xoffset, double yoffset)
 void mouseReceiver(GLFWwindow* window, double xpos, double ypos) {
 	angx = xpos * 0.01f;
 	angy = ypos * 0.01f;
+}
+
+void deformObject(GLFWwindow* window) {
+	// Release all the keys
+	if (!glfwGetKey(window, 53)) // ASCII value for number 5
+		key5_releassed = true;
+
+	// Deformation control on/off
+	if (glfwGetKey(window, 53) && key5_releassed)
+	{
+		if (def_active)
+		{
+			// Deform active
+			GLint effectViewId = glGetProgramResourceLocation(programa, GL_UNIFORM, "EffectActive");
+			glProgramUniform1i(programa, effectViewId, 1);
+			std::cout << "Deformation is on!" << std::endl;
+			def_active = false;
+		}
+		else
+		{
+			// Deform not active
+			GLint effectViewId = glGetProgramResourceLocation(programa, GL_UNIFORM, "EffectActive");
+			glProgramUniform1i(programa, effectViewId, 0);
+			std::cout << "Deformation is off!" << std::endl;
+			def_active = true;
+		}
+		key5_releassed = false;
+	}
 }

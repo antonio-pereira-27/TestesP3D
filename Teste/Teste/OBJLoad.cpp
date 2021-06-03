@@ -53,8 +53,8 @@ bool OBJ::loadOBJ(const char* path) {
 			//normais
 			for (int i = 0; i < uvIndices.size(); i++) {
 				int uvindex = uvIndices[i];
-				glm::vec3 vertex = temp_vertices[uvindex - 1];
-				uvs.push_back(vertex);
+				glm::vec2 uvex = temp_uvs[uvindex - 1];
+				uvs.push_back(uvex);
 			}
 
 			//normais
